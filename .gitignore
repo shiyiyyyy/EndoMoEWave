@@ -1,0 +1,24 @@
+# 忽略图片文件
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.pyc
+*.txt
+root/
+results/
+# 忽略模型权重文件
+*.pth
+.idea/
+img_test/
+test/
+test1/
+test4/
+vision_quality/
+vision_test/
+vision_testbf/
+yzp/
+.claude/
+checkpoints/
+
+
