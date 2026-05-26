@@ -6,7 +6,7 @@ import numpy as np
 import os
 import torch
 
-from depth_anything_v2.dpt import DepthAnythingV2
+from net.dpt import EndoMoEWave
 
 
 if __name__ == '__main__':
@@ -37,9 +37,9 @@ if __name__ == '__main__':
         'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
     }
 
-    depth_anything = DepthAnythingV2(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
-    depth_anything.load_state_dict(torch.load(args.load_from, map_location='cpu'))
-    depth_anything = depth_anything.to(DEVICE).eval()
+    endo_moewave = EndoMoEWave(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
+    endo_moewave.load_state_dict(torch.load(args.load_from, map_location='cpu'))
+    endo_moewave = endo_moewave.to(DEVICE).eval()
     if os.path.isfile(args.img_path):
         if args.img_path.endswith('txt'):
             with open(args.img_path, 'r') as f:
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
         raw_image  = cv2.imread(filename, -1)
         #raw_image = cv2.resize(raw_image, (args.img_width, args.img_height))
-        depth = depth_anything.infer_image(raw_image, args.img_height, args.img_width)
+        depth = endo_moewave.infer_image(raw_image, args.img_height, args.img_width)
         # depth = raw_image
         if args.save_numpy:
             output_path = os.path.join(args.outdir,os.path.splitext(os.path.basename(filename))[0] + '_raw_depth_meter.npy')

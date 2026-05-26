@@ -1,10 +1,10 @@
 import os
 root = "../../../../dataset/c3vd"
 sequences = [
-    "cecum_t4_b","sigmoid_t3_b","trans_t3_b","desc_t4_a"
+    "cecum_t1_a"
 ]
 
-output_txt = "test513.txt"
+output_txt = "val.txt"
 
 with open(output_txt, "w") as f:
     for seq in sequences:

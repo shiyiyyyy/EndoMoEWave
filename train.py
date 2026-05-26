@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 from dataset.c3vd import C3VD
 from dataset.scared import SCARED
-from depth_anything_v2.dpt import DepthAnythingV2
+from net.dpt import EndoMoEWave
 from util.dist_helper import setup_distributed
 from util.loss import LogrmseLoss, EdgeAwareSmoothnessLoss, EdgeAwareGradientLoss, SurfaceNormalLoss, MultiScaleGradientLoss
 from util.metric import eval_depth
@@ -79,7 +79,7 @@ def main():
 
     size = (args.img_width, args.img_height)
     if args.dataset == 'c3vd':
-        trainset = C3VD('root/c3vd513/tra513.txt', 'train', size=size)
+        trainset = C3VD('root/tra.txt', 'train', size=size)
     elif args.dataset == 'scared':
         trainset = SCARED('root/scared/scared_tra.txt', 'train', size=size)
     else:
@@ -88,7 +88,7 @@ def main():
     trainloader = DataLoader(trainset, batch_size=args.bs, pin_memory=True, num_workers=4, drop_last=True, sampler=trainsampler)
 
     if args.dataset == 'c3vd':
-        filelist_path = 'root/c3vd513/val513.txt'
+        filelist_path = 'root/val.txt'
         logger.info(f"Test file: {filelist_path}")
         valset = C3VD(filelist_path, 'val', size=size)
     elif args.dataset == 'scared':
@@ -109,7 +109,7 @@ def main():
         'vithuge':   {'encoder': 'vithuge',   'features': 320, 'out_channels': [320, 640, 1280, 1280]},
         'vit7b':     {'encoder': 'vit7b',     'features': 512, 'out_channels': [1024, 2048, 4096, 4096]},
     }
-    model = DepthAnythingV2(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
+    model = EndoMoEWave(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
 
 
 
@@ -150,6 +150,7 @@ def main():
     criterion_silog    = LogrmseLoss().cuda(local_rank)
     criterion_msgrad   = MultiScaleGradientLoss().cuda(local_rank)
     criterion_edge_grad = EdgeAwareGradientLoss().cuda(local_rank)
+    criterion_smooth   = EdgeAwareSmoothnessLoss().cuda(local_rank)
 
 
 
@@ -189,7 +190,10 @@ def main():
 
             pred = model(img)
             valid = (valid_mask == 1) & (depth >= args.min_depth) & (depth <= args.max_depth)
-            loss = criterion_silog(pred, depth, valid) + 0.1 * criterion_edge_grad(pred, depth, valid, img)
+            loss = criterion_silog(pred, depth, valid) \
+                 + 0.3 * criterion_edge_grad(pred, depth, valid, img) \
+                 + 0.3 * criterion_smooth(pred, img) \
+                 + 0.3 * criterion_msgrad(pred, depth, valid)
 
             loss.backward()
             optimizer.step()

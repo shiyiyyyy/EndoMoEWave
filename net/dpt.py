@@ -274,7 +274,7 @@ class WaveDPTHead(nn.Module):
 
 
 
-class DepthAnythingV2(nn.Module):
+class EndoMoEWave(nn.Module):
     def __init__(
         self,
         encoder='vitl',
@@ -284,7 +284,7 @@ class DepthAnythingV2(nn.Module):
         use_clstoken=False,
         max_depth=20.0
     ):
-        super(DepthAnythingV2, self).__init__()
+        super(EndoMoEWave, self).__init__()
 
         self.intermediate_layer_idx = {
             'vits':      [2, 5, 8, 11],

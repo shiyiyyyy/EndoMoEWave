@@ -13,7 +13,7 @@ import random
 
 from dataset.hypersim import Hypersim
 from dataset.kitti import KITTI
-from depth_anything_v2.dpt import DepthAnythingV2
+from net.dpt import EndoMoEWave
 from util.dist_helper import setup_distributed
 from util.metric import eval_depth
 from util.utils import init_log
@@ -103,9 +103,9 @@ def main():
         'vithuge':   {'encoder': 'vithuge',   'features': 320, 'out_channels': [320, 640, 1280, 1280]},
         'vit7b':     {'encoder': 'vit7b',     'features': 512, 'out_channels': [1024, 2048, 4096, 4096]},
     }
-    model = DepthAnythingV2(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
+    model = EndoMoEWave(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
     #model = SurgicalDINO(backbone_size="no_seed_ori", r=4, lora_layer=None, image_shape=(518,518), decode_type = 'linear4').to(device = device)
-    # model = DepthAnythingV2(
+    # model = EndoMoEWave(
     #     **{**model_configs[args.encoder], 'max_depth': args.max_depth},
     # )
 

@@ -28,7 +28,7 @@ import os
 from PIL import Image
 import torch
 
-from depth_anything_v2.dpt import DepthAnythingV2
+from net.dpt import EndoMoEWave
 
 
 def main():
@@ -62,10 +62,10 @@ def main():
         'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
     }
 
-    # Initialize the DepthAnythingV2 model with the specified configuration
-    depth_anything = DepthAnythingV2(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
-    depth_anything.load_state_dict(torch.load(args.load_from, map_location='cpu'))
-    depth_anything = depth_anything.to(DEVICE).eval()
+    # Initialize the EndoMoEWave model with the specified configuration
+    endo_moewave = EndoMoEWave(**{**model_configs[args.encoder], 'max_depth': args.max_depth})
+    endo_moewave.load_state_dict(torch.load(args.load_from, map_location='cpu'))
+    endo_moewave = endo_moewave.to(DEVICE).eval()
 
     # Get the list of image files to process
     if os.path.isfile(args.img_path):
@@ -90,7 +90,7 @@ def main():
 
         # Read the image using OpenCV
         image = cv2.imread(filename)
-        pred = depth_anything.infer_image(image, height)
+        pred = endo_moewave.infer_image(image, height)
 
         # Resize depth prediction to match the original image size
         resized_pred = Image.fromarray(pred).resize((width, height), Image.NEAREST)
