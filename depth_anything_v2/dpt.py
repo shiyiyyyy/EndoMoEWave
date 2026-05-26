@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms import Compose
-from .dinov2 import DINOv2
 from .dinov3 import DINOv3
 from dinov3.models.vision_transformer import DynamicStorageAdapter, StorageGuidedLoRAScaleGenerator
 from .util.blocks import FeatureFusionBlock, _make_scratch
@@ -37,128 +36,6 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         return self.conv_block(x)
 
-
-
-class DPTHead(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        features=256,
-        use_bn=False,
-        out_channels=[256, 512, 1024, 1024],
-        use_clstoken=False
-    ):
-        super(DPTHead, self).__init__()
-
-        self.use_clstoken = use_clstoken
-
-        self.projects = nn.ModuleList([
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channel,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-            ) for out_channel in out_channels
-        ])
-        self.resize_layers = nn.ModuleList([
-            nn.ConvTranspose2d(
-                in_channels=out_channels[0],
-                out_channels=out_channels[0],
-                kernel_size=4,
-                stride=4,
-                padding=0),
-            nn.ConvTranspose2d(
-                in_channels=out_channels[1],
-                out_channels=out_channels[1],
-                kernel_size=2,
-                stride=2,
-                padding=0),
-            nn.Identity(),
-            nn.Conv2d(
-                in_channels=out_channels[3],
-                out_channels=out_channels[3],
-                kernel_size=3,
-                stride=2,
-                padding=1)
-        ])
-
-        if use_clstoken:
-            self.readout_projects = nn.ModuleList()
-            for _ in range(len(self.projects)):
-                self.readout_projects.append(
-                    nn.Sequential(
-                        nn.Linear(2 * in_channels, in_channels),
-                        nn.GELU()))
-
-        self.scratch = _make_scratch(
-            out_channels,
-            features,
-            groups=1,
-            expand=False,
-        )
-
-        self.scratch.stem_transpose = None
-
-        self.scratch.refinenet1 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet2 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet3 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet4 = _make_fusion_block(features, use_bn)
-
-        head_features_1 = features
-        head_features_2 = 32
-
-        self.scratch.output_conv1 = nn.Conv2d(head_features_1, head_features_1 // 2, kernel_size=3, stride=1, padding=1)
-        self.scratch.output_conv2 = nn.Sequential(
-            nn.Conv2d(head_features_1 // 2, head_features_2, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(head_features_2, 1, kernel_size=1, stride=1, padding=0),
-            nn.Sigmoid()
-        )
-
-    def forward(self, out_features, patch_h, patch_w):
-        out = []
-        for i, x in enumerate(out_features):
-            if self.use_clstoken:
-                x, cls_token = x[0], x[1]
-                readout = cls_token.unsqueeze(1).expand_as(x)
-                x = self.readout_projects[i](torch.cat((x, readout), -1))
-            else:
-                x = x[0] #(16,1369,768)
-
-            x = x.permute(0, 2, 1).reshape((x.shape[0], x.shape[-1], patch_h, patch_w))  #(16,768,37,37)
-
-            x = self.projects[i](x) #(16,96,37,37) #(16,192,37,37)  (16,384,37,37) (16,768,37,37)
-
-            x = self.resize_layers[i](x) #(16,96,148,148） #(16,192,74,74)  (16,384,37,37) (16,768,19,19)
-
-            out.append(x)
-
-        layer_1, layer_2, layer_3, layer_4 = out
-
-
-
-        layer_1_rn = self.scratch.layer1_rn(layer_1) #(16,128,148,148) 16,128,37,37
-        layer_2_rn = self.scratch.layer2_rn(layer_2) #(16,128,74,74) 16,128,37,37
-        layer_3_rn = self.scratch.layer3_rn(layer_3) #(16,128,37,37) 16,128,37,37
-        layer_4_rn = self.scratch.layer4_rn(layer_4) #(16,128,19,19) 16,128,37,37
-
-        path_4 = self.scratch.refinenet4(layer_4_rn, size=layer_3_rn.shape[2:])    #(16,128,37,37) 16,128,37,37
-        path_3 = self.scratch.refinenet3(path_4, layer_3_rn, size=layer_2_rn.shape[2:]) #(16,128,74,74) 16,128,37,37
-        path_2 = self.scratch.refinenet2(path_3, layer_2_rn, size=layer_1_rn.shape[2:]) #(16,128,148,148) 16,128,37,37
-        path_1 = self.scratch.refinenet1(path_2, layer_1_rn) #(16,128,296,296) 16,128,74,74
-
-        out = self.scratch.output_conv1(path_1) #(16,64,296,296) 16 64,74,74
-        out = F.interpolate(out, (int(patch_h * 16), int(patch_w * 16)), mode="bilinear", align_corners=True) #(16,64,512,640)
-        out = self.scratch.output_conv2(out) #(16,1,518,518) 16,1,518,518
-
-        return out
-
-
-# ============================================================
-# WaveDPT: Wavelet-based DPT Decoder
-# ============================================================
-#
 def _make_norm(channels, use_bn):
     if use_bn:
         return nn.BatchNorm2d(channels)
@@ -422,7 +299,6 @@ class DepthAnythingV2(nn.Module):
         self.max_depth = max_depth
 
         self.encoder = encoder
-        #self.pretrained = DINOv2(model_name=encoder)
         self.pretrained = DINOv3(model_name=encoder)
 
         if self.pretrained.n_storage_tokens > 0:
@@ -436,7 +312,6 @@ class DepthAnythingV2(nn.Module):
 
         self.depth_head = WaveDPTHead(self.pretrained.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken)
 
-        #self.depth_head = DPTHead(self.pretrained.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken)
 
 
     def forward(self, x):
@@ -450,11 +325,10 @@ class DepthAnythingV2(nn.Module):
 
     @torch.no_grad()
     def infer_image(self, raw_image, input_height=476, input_width=588):
-        image, (h, w) = self.image2tensor(raw_image, input_height, input_width)
+        image = self.image2tensor(raw_image, input_height, input_width)
 
         depth = self.forward(image)
 
-        #depth = F.interpolate(depth[:, None], (input_height, input_width), mode="bilinear", align_corners=True)[0, 0]
 
         return depth[0].cpu().numpy()
 
