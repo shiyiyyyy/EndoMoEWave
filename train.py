@@ -17,7 +17,7 @@ from dataset.c3vd import C3VD
 from dataset.scared import SCARED
 from depth_anything_v2.dpt import DepthAnythingV2
 from util.dist_helper import setup_distributed
-from util.loss import SiLogLoss, EdgeAwareSmoothnessLoss, EdgeAwareGradientLoss, SurfaceNormalLoss, MultiScaleGradientLoss
+from util.loss import LogrmseLoss, EdgeAwareSmoothnessLoss, EdgeAwareGradientLoss, SurfaceNormalLoss, MultiScaleGradientLoss
 from util.metric import eval_depth
 from util.utils import init_log
 from collections import OrderedDict
@@ -147,7 +147,7 @@ def main():
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], broadcast_buffers=False,
                                                       output_device=local_rank, find_unused_parameters=True)
 
-    criterion_silog    = SiLogLoss(lambd=0).cuda(local_rank)
+    criterion_silog    = LogrmseLoss().cuda(local_rank)
     criterion_msgrad   = MultiScaleGradientLoss().cuda(local_rank)
     criterion_edge_grad = EdgeAwareGradientLoss().cuda(local_rank)
 
